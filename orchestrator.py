@@ -9,6 +9,10 @@ from db.drafts import persist_draft
 from db.drafts import auto_approve_draft
 import asyncio
 from dotenv import load_dotenv
+import requests
+import threading
+import os
+
 
 
 # Load environment variables from .env file
@@ -42,6 +46,23 @@ def fetch_thread(conn, thread_id):
         WHERE thread_id = ?
         ORDER BY received_at
     """, (thread_id,)).fetchall()
+
+
+def push(text):
+    def send():
+        try:
+            requests.post(
+                "https://api.pushover.net/1/messages.json",
+                data={
+                    "token": os.environ.get("PUSHOVER_TOKEN"),
+                    "user": os.environ.get("PUSHOVER_USER"),
+                    "message": text,
+                },
+                timeout=10
+            )
+        except Exception as e:
+            print(f"Pushover notification failed: {e}")
+    threading.Thread(target=send).start()
 
 
 # Function to mark an email as processed in the database.
@@ -119,6 +140,8 @@ async def main():
                     reason="Skipping processing of system-sent outgoing email."
                 )
 
+                push(f"Ignored outgoing system email: {subject} from {from_email}. Thread ID: {thread_id}. Message ID: {message_id}. Direction: {direction}. Received at: {received_at}. Body: {body[:100]}.")
+
                 persist_decision(
                     message_id=message_id,
                     thread_id=thread_id,
@@ -153,6 +176,7 @@ async def main():
             if decision.action == "auto_reply":
  # Run the reply agent to generate a draft.
                 draft = await run_reply_agent(thread_messages)
+                push(f"Draft generated for: {subject} from {from_email}. Thread ID: {thread_id}. Message ID: {message_id}.")
                 # persist_draft(
                 #     message_id=message_id,
                 #     thread_id=thread_id,
@@ -180,14 +204,24 @@ async def main():
                     and draft.confidence >= AUTO_DRAFT_THRESHOLD
                 ):
                     auto_approve_draft(conn, draft_id)
+                    push(f"Auto-approved draft: {subject} from {from_email}. Thread ID: {thread_id}. Message ID: {message_id}.")
+                    push(f"Draft body: {draft.body}")
                     print(f"✅ Auto-approved draft {draft_id}") # Log auto-approval.
                 else:
+                    push(f"Draft pending human review: {subject} from {from_email}. Draft ID: {draft_id}. Thread ID: {thread_id}. Message ID: {message_id}. Body: {draft.body}")
                     print(f"🕒 Draft {draft_id} pending human review") # Log pending review.
 
                 # print("📝 Draft reply persisted")
+            elif decision.action == "escalate":
+                push(f"Escalated!! Human Intervention Required: message_id={message_id}, thread_id={thread_id}, decision={decision.model_dump_json()}")
+                # Log escalation with details.
+            elif decision.action == "ignore":
+                push(f"Ignored: {subject} from {from_email}. Thread ID: {thread_id}")
+                # Log ignore with details.
 
  # Mark the current email as processed.
             mark_processed(conn, message_id)
+            push("✅ Marked processed")
             print("✅ Marked processed\n")
 
 # Entry point for the script.

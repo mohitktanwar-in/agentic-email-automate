@@ -127,6 +127,10 @@ def callback(message: pubsub_v1.subscriber.message.Message):
         print("📩 Stored email:")
         print("  Message-ID:", message_id)
         print("  Thread-ID :", thread_id)
+        print("  From      :", payload.get("from"))
+        print("  To        :", payload.get("to"))
+        print("  Received at:", payload.get("received_at"))
+        print("  Subject   :", payload.get("subject"))
         message.ack()
 
     except IntegrityError:

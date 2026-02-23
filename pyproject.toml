@@ -1,0 +1,17 @@
+[project]
+name = "agentic-email-automate"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncio>=4.0.0",
+    "google>=3.0.0",
+    "google-cloud>=0.34.0",
+    "google-cloud-pubsub>=2.35.0",
+    "openai>=2.21.0",
+    "openai-agents>=0.9.3",
+    "pushover>=0.5",
+    "pydantic>=2.12.5",
+    "sendgrid>=6.12.5",
+]
