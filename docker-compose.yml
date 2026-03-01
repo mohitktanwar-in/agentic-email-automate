@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  ingestion:
+    build: .
+    container_name: email_ingestion
+    command: python -m worker
+    volumes:
+      - ./db:/app/db
+      - C:/Users/mohit/AppData/Roaming/gcloud:/root/.config/gcloud:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  orchestrator:
+    build: .
+    container_name: email_orchestrator
+    command: python -m orchestrator
+    volumes:
+      - ./db:/app/db
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  sender:
+    build: .
+    container_name: email_sender
+    command: python -m sender_loop
+    volumes:
+      - ./db:/app/db
+    env_file:
+      - .env
+    restart: unless-stopped
