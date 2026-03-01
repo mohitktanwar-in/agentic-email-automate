@@ -8,9 +8,14 @@ from sendgrid.helpers.mail import (
     Header
 )
 from dotenv import load_dotenv
+import uuid
 
 load_dotenv(override=True)
 # Function to send an email
+
+def generate_message_id(domain: str = "aiguru360.in") -> str:
+    return f"<{uuid.uuid4().hex}@{domain}>"
+
 def send_email(
     *,
     to_email: str,
@@ -30,6 +35,10 @@ def send_email(
         plain_text_content=Content("text/plain", body),
     )
 
+    # ---- Threading headers ----
+    message_id = generate_message_id()
+    mail.add_header(Header("Message-ID", message_id))
+
     if in_reply_to:
         mail.add_header(Header("In-Reply-To", in_reply_to))
 
@@ -43,5 +52,5 @@ def send_email(
 
     return {
         "status": "success",
-        "provider_message_id": response.headers.get("X-Message-Id"),
+        "provider_message_id": message_id,
     }

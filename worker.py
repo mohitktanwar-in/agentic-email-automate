@@ -6,6 +6,8 @@ from google.cloud import pubsub_v1
 from db.db import init_db, get_conn
 from sqlite3 import IntegrityError
 from datetime import datetime, timezone
+from email.parser import Parser
+from email.header import decode_header
 
 
 # Google Cloud Project ID and Pub/Sub subscription ID.
@@ -19,9 +21,29 @@ subscription_path = subscriber.subscription_path(
     PROJECT_ID, SUBSCRIPTION_ID
 )
 
+def parse_headers(raw_headers):
+    parser = Parser()
+    msg = parser.parsestr(raw_headers)
+
+    print("HEADERS FOUND:")
+    for key in msg.keys():
+        print(f" - {key}")
+
+    print("References value:", msg.get("References"))
+    print("In-Reply-To value:", msg.get("In-Reply-To"))
+
+    in_reply_to = msg.get("In-Reply-To")
+    references = []
+    for header_value in msg.get_all("References", []):
+        # Split on whitespace
+        parts = header_value.strip().split()
+        references.extend(parts)
+    return in_reply_to, references
+
 def extract_in_reply_to(headers: str | None):
  # If no headers are provided, return None.
     if not headers:
+        print("⚠️ No headers provided, skipping")
         return None
  # Use regex to find the 'In-Reply-To' header and extract its value.
     match = re.search(
@@ -35,6 +57,7 @@ def extract_in_reply_to(headers: str | None):
 def extract_references(headers: str | None):
  # If no headers are provided, return an empty list.
     if not headers:
+        print("⚠️ No headers provided, skipping")
         return []
  # Use regex to find the 'References' header.
     match = re.search(
@@ -45,10 +68,13 @@ def extract_references(headers: str | None):
         re.IGNORECASE
     )
     if not match:
+        print("⚠️ No references provided, skipping")
         return []
     # split on whitespace, keep <...>
  # Extract all message IDs enclosed in angle brackets from the references string.
-    return re.findall(r"<[^>]+>", match.group(1))
+    references = re.findall(r"<[^>]+>", match.group(1))
+    print("References found:", references)
+    return references
 
 
 def resolve_thread_id(conn, in_reply_to, references):
@@ -82,13 +108,22 @@ def callback(message: pubsub_v1.subscriber.message.Message):
         message_id = payload.get("message_id")
         raw_headers = payload.get("raw_headers")
 
+        in_reply_to, references = parse_headers(raw_headers)
+        if not in_reply_to:
+            print("⚠️ No In-Reply-To found, fallback to extract_in_reply_to")
+            in_reply_to = extract_in_reply_to(raw_headers)
+        if not references:
+            print("⚠️ No References found, fallback to extract_references")
+            references = extract_references(raw_headers)
+
         if not message_id:
             print("⚠️ Missing message_id, skipping")
             message.ack()
             return
+            
 
-        in_reply_to = extract_in_reply_to(raw_headers)
-        references = extract_references(raw_headers)
+        # in_reply_to = extract_in_reply_to(raw_headers)
+        # references = extract_references(raw_headers)
 
         with get_conn() as conn:
             thread_id = resolve_thread_id(conn, in_reply_to, references)
